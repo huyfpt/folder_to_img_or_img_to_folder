@@ -9,8 +9,26 @@ import io
 # Tăng giới hạn Pillow để tránh lỗi "Decompression Bomb"
 Image.MAX_IMAGE_PIXELS = None
 
-# Khóa cố định (có thể thay đổi hoặc sinh ngẫu nhiên)
-SECRET_KEY = b""  # 16, 24, 32 bytes
+# Hàm tạo khóa từ mật khẩu nhập vào
+def get_key_from_password():
+    password = input("🔑 Nhập mật khẩu: ").strip().encode()
+    
+    # Đảm bảo độ dài hợp lệ bằng cách cắt hoặc thêm '\x00'
+    if len(password) < 16:
+        password = password.ljust(16, b'\x00')
+    elif 16 < len(password) < 24:
+        password = password.ljust(24, b'\x00')
+    elif 24 < len(password) < 32:
+        password = password.ljust(32, b'\x00')
+    elif len(password) > 32:
+        password = password[:32]  # Cắt bớt nếu quá dài
+    
+    return password
+
+SECRET_KEY = get_key_from_password()
+
+
+# SECRET_KEY = b""  # 16, 24, 32 bytes
 
 # Nén thư mục thành file ZIP
 def zip_folder(folder_path, output_zip):
@@ -30,7 +48,7 @@ def encrypt_data(data, key):
     return iv + encrypted_data
 
 # Nhúng dữ liệu vào ảnh, chia nhỏ nếu quá lớn
-def encode_image(data, output_prefix, max_size=1000 * 1024 * 1024):  # 50MB mỗi ảnh (chia nhỏ nếu quá lớn)
+def encode_image(data, output_prefix, max_size=50 * 1024 * 1024):  # 50MB mỗi ảnh (chia nhỏ nếu quá lớn)
     num_parts = (len(data) // max_size) + 1
     print(f"🖼 Tổng dữ liệu: {len(data)} bytes, Số ảnh cần tạo: {num_parts}")
 

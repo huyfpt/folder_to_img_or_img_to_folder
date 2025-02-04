@@ -3,4 +3,4 @@
 </br> run pip install Pillow
 </br> run pip install numpy
 
-</br>input string to SECRET_KEY example 'ThisIsASecretKey'
+</br>input string password to do next step . Example: thisIsPassword
