@@ -93,9 +93,49 @@ def process_decrypt_folder(image_folder, password, progress_callback, finish_cal
 # Mã hóa thư mục thành ảnh
 def process_encrypt_folder(folder, password, progress_callback, finish_callback):
     SECRET_KEY = get_key_from_password(password)
-    # Giả lập mã hóa thư mục thành ảnh (bạn có thể thay đổi theo yêu cầu)
-    print("✅ Mã hóa thư mục thành ảnh hoàn tất!")
+    
+    # Tạo thư mục lưu ảnh mã hóa
+    output_folder = os.path.join(folder, "encrypted_images_output")
+    os.makedirs(output_folder, exist_ok=True)
+
+    # Nén thư mục thành file ZIP
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(folder):
+            for file in files:
+                file_path = os.path.join(root, file)
+                arcname = os.path.relpath(file_path, folder)
+                zipf.write(file_path, arcname)
+    
+    # Mã hóa dữ liệu
+    encrypted_data = zip_buffer.getvalue()
+    cipher = AES.new(SECRET_KEY, AES.MODE_CBC)
+    iv = cipher.iv
+    encrypted_data = iv + cipher.encrypt(pad(encrypted_data, AES.block_size))
+
+    # Chia dữ liệu thành nhiều ảnh (mỗi ảnh 50MB)
+    chunk_size = 50 * 1024 * 1024  # 50MB
+    img_width = 5000  # Chiều rộng cố định (có thể thay đổi)
+    
+    for i, chunk_start in enumerate(range(0, len(encrypted_data), chunk_size)):
+        chunk = encrypted_data[chunk_start:chunk_start + chunk_size]
+        
+        # Tính toán chiều cao dựa trên kích thước dữ liệu
+        height = (len(chunk) + img_width - 1) // img_width  # Làm tròn lên
+        
+        # Tạo ma trận ảnh
+        padded_chunk = chunk.ljust(img_width * height, b'\x00')  # Đệm dữ liệu để đủ shape
+        img_array = np.frombuffer(padded_chunk, dtype=np.uint8).reshape((height, img_width))
+        
+        # Lưu ảnh
+        img = Image.fromarray(img_array)
+        img_path = os.path.join(output_folder, f"note{i+1}.png")
+        img.save(img_path)
+        print(f"✅ Đã lưu ảnh mã hóa: {img_path} ({len(chunk)} bytes)")
+
+    print(f"✅ Mã hóa thư mục hoàn tất! Ảnh được lưu tại: {output_folder}")
     finish_callback()
+
 
 # Giải mã từ danh sách ảnh
 def process_decrypt_images(image_files, password, progress_callback, finish_callback):
