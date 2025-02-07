@@ -93,7 +93,7 @@ def process_decrypt_folder(image_folder, password, progress_callback, finish_cal
 # Mã hóa thư mục thành ảnh
 def process_encrypt_folder(folder, password, progress_callback, finish_callback):
     SECRET_KEY = get_key_from_password(password)
-    
+
     # Tạo thư mục lưu ảnh mã hóa
     output_folder = os.path.join(folder, "encrypted_images_output")
     os.makedirs(output_folder, exist_ok=True)
@@ -106,7 +106,7 @@ def process_encrypt_folder(folder, password, progress_callback, finish_callback)
                 file_path = os.path.join(root, file)
                 arcname = os.path.relpath(file_path, folder)
                 zipf.write(file_path, arcname)
-    
+
     # Mã hóa dữ liệu
     encrypted_data = zip_buffer.getvalue()
     cipher = AES.new(SECRET_KEY, AES.MODE_CBC)
@@ -117,37 +117,55 @@ def process_encrypt_folder(folder, password, progress_callback, finish_callback)
     chunk_size = 50 * 1024 * 1024  # 50MB
     img_width = 5000  # Chiều rộng cố định (có thể thay đổi)
     
-    for i, chunk_start in enumerate(range(0, len(encrypted_data), chunk_size)):
+    total_chunks = (len(encrypted_data) + chunk_size - 1) // chunk_size  # Tổng số ảnh cần tạo
+
+    for idx, chunk_start in enumerate(range(0, len(encrypted_data), chunk_size)):
         chunk = encrypted_data[chunk_start:chunk_start + chunk_size]
-        
+
         # Tính toán chiều cao dựa trên kích thước dữ liệu
-        height = (len(chunk) + img_width - 1) // img_width  # Làm tròn lên
-        
+        height = (len(chunk) + img_width - 1) // img_width
+
         # Tạo ma trận ảnh
         padded_chunk = chunk.ljust(img_width * height, b'\x00')  # Đệm dữ liệu để đủ shape
         img_array = np.frombuffer(padded_chunk, dtype=np.uint8).reshape((height, img_width))
-        
+
         # Lưu ảnh
         img = Image.fromarray(img_array)
-        img_path = os.path.join(output_folder, f"note{i+1}.png")
+        img_path = os.path.join(output_folder, f"note{idx+1}.png")
         img.save(img_path)
-        print(f"✅ Đã lưu ảnh mã hóa: {img_path} ({len(chunk)} bytes)")
+
+        # 🔹 Cập nhật progress bar
+        progress_callback(idx + 1, total_chunks)
 
     print(f"✅ Mã hóa thư mục hoàn tất! Ảnh được lưu tại: {output_folder}")
     finish_callback()
-
 
 # Giải mã từ danh sách ảnh
 def process_decrypt_images(image_files, password, progress_callback, finish_callback):
     SECRET_KEY = get_key_from_password(password)
     
-    encrypted_data = decode_images(image_files, progress_callback)
-    decrypted_data = decrypt_data(encrypted_data, SECRET_KEY)
+    total_files = len(image_files)
+    full_data = b""
+
+    for idx, img_path in enumerate(image_files):
+        try:
+            img = Image.open(img_path)
+            data = np.array(img).flatten().tobytes().rstrip(b"\x00")
+            full_data += data
+
+            # 🔹 Cập nhật progress bar
+            progress_callback(idx + 1, total_files)
+
+        except Exception as e:
+            print(f"\u274C Lỗi đọc ảnh '{img_path}': {e}")
+
+    decrypted_data = decrypt_data(full_data, SECRET_KEY)
     if decrypted_data:
         unzip_file(decrypted_data, "output_folder")
-    
+
     print("✅ Giải mã hoàn tất!")
     finish_callback()
+
 
 # Tạo giao diện Tkinter
 def open_main_ui():
@@ -156,21 +174,17 @@ def open_main_ui():
         if not password:
             messagebox.showwarning("Cảnh báo", "Vui lòng nhập mật khẩu!")
             return
-        
         choice = choice_var.get()
-        
         if choice == "1":
             folder = filedialog.askdirectory(title="Chọn thư mục cần mã hóa")
             if folder:
                 progress_bar["value"] = 0
                 threading.Thread(target=process_encrypt_folder, args=(folder, password, update_progress, show_finish_message)).start()
-
         elif choice == "2":
             image_folder = filedialog.askdirectory(title="Chọn thư mục chứa ảnh mã hóa")
             if image_folder:
                 progress_bar["value"] = 0
                 threading.Thread(target=process_decrypt_folder, args=(image_folder, password, update_progress, show_finish_message)).start()
-
         elif choice == "3":
             image_files = filedialog.askopenfilenames(title="Chọn các ảnh cần giải mã", filetypes=[("PNG files", "*.png")])
             if image_files:
@@ -180,7 +194,7 @@ def open_main_ui():
     def update_progress(current, total):
         progress_bar["maximum"] = total
         progress_bar["value"] = current
-        root.update_idletasks()
+        root.update_idletasks()  # Cập nhật UI ngay lập tức
 
     def show_finish_message():
         messagebox.showinfo("Hoàn tất", "✅ Quá trình đã hoàn tất!")
